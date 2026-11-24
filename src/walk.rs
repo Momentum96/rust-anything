@@ -78,13 +78,14 @@ impl Canonical for Path {
     }
 }
 
-/// The path a `file://` URL names, percent-decoded. On Windows the URL is `file:///C:/...`; the
-/// slash before the drive letter is dropped so the path compares with the project root.
-pub fn file_url_path(url: &str) -> Option<String> {
+/// The path a `file://` URL names, percent-decoded. On Windows the URL is `file:///C:/...`; when
+/// `root` is a drive path the slash before the drive letter is dropped so the path compares with
+/// it. Under a Unix root `/C:/repo` the slash is part of the path and stays.
+pub fn file_url_path(url: &str, root: &Path) -> Option<String> {
     let path =
         percent_encoding::percent_decode_str(url.strip_prefix("file://")?).decode_utf8_lossy();
     Some(match path.strip_prefix('/') {
-        Some(rest) if has_drive(rest) => rest.to_string(),
+        Some(rest) if has_drive(rest) && has_drive(&root.to_string_lossy()) => rest.to_string(),
         _ => path.into_owned(),
     })
 }

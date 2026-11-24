@@ -355,7 +355,7 @@ pub fn profile(root: &Path, command: &[String], lang: Option<Lang>) -> Result<Re
 /// A frame's file: repository-relative, or absolute for user code elsewhere (a workload
 /// script); `None` for the runtime and installed libraries.
 fn relative(root: &Path, file: &str) -> Option<String> {
-    let decoded = crate::walk::file_url_path(file);
+    let decoded = crate::walk::file_url_path(file, root);
     let path = decoded.as_deref().unwrap_or(file);
     if !path.starts_with('/') && !crate::walk::has_drive(path) && !path.contains(":\\") {
         let rel = path.trim_start_matches("./");
@@ -2424,12 +2424,25 @@ mod tests {
         );
         assert!(in_repo("src/fuzzy.ts") && !in_repo("C:/Users/me/AppData/Local/Temp/bench.mjs"));
         assert_eq!(
-            crate::walk::file_url_path("file:///C:/My%20Repo/a.ts").as_deref(),
+            crate::walk::file_url_path("file:///C:/My%20Repo/a.ts", root).as_deref(),
             Some("C:/My Repo/a.ts")
         );
         assert_eq!(
-            crate::walk::file_url_path("file:///repo/a.ts").as_deref(),
+            crate::walk::file_url_path("file:///repo/a.ts", root).as_deref(),
             Some("/repo/a.ts")
+        );
+    }
+
+    #[test]
+    fn a_unix_root_that_looks_like_a_drive_path_keeps_its_leading_slash() {
+        let root = Path::new("/C:/repo");
+        assert_eq!(
+            relative(root, "file:///C:/repo/src/a.ts").as_deref(),
+            Some("src/a.ts")
+        );
+        assert_eq!(
+            crate::walk::file_url_path("file:///C:/repo/src/a.ts", root).as_deref(),
+            Some("/C:/repo/src/a.ts")
         );
     }
 
