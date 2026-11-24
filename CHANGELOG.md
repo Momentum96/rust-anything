@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- On Windows, `profile` and `go` find the project's own functions in a Node workload: Node's
+  `file:///C:/...` frame URLs kept the slash before the drive letter, so no frame matched the
+  project root and `go` stopped with `no hot function to port`.
 - `app record` and `app replay` fail with `port <port> is already in use` before spawning a server
   on an occupied port and check whether the child exited before treating the port as ready (#326).
 

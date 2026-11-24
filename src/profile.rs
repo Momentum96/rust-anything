@@ -355,14 +355,9 @@ pub fn profile(root: &Path, command: &[String], lang: Option<Lang>) -> Result<Re
 /// A frame's file: repository-relative, or absolute for user code elsewhere (a workload
 /// script); `None` for the runtime and installed libraries.
 fn relative(root: &Path, file: &str) -> Option<String> {
-    let decoded;
-    let path = if let Some(url_path) = file.strip_prefix("file://") {
-        decoded = percent_encoding::percent_decode_str(url_path).decode_utf8_lossy();
-        decoded.as_ref()
-    } else {
-        file
-    };
-    if !path.starts_with('/') && !path.contains(":\\") {
+    let decoded = crate::walk::file_url_path(file);
+    let path = decoded.as_deref().unwrap_or(file);
+    if !path.starts_with('/') && !crate::walk::has_drive(path) && !path.contains(":\\") {
         let rel = path.trim_start_matches("./");
         return (!rel.starts_with(['<', '~']) && !rel.contains(':') && root.join(rel).is_file())
             .then(|| rel.replace('\\', "/")); // node:internal/..., <frozen ...>, ~
@@ -423,7 +418,7 @@ fn goroot() -> Option<&'static str> {
 
 /// Whether a frame file is inside the repository (relative).
 fn in_repo(file: &str) -> bool {
-    !file.starts_with('/')
+    !file.starts_with('/') && !crate::walk::has_drive(file)
 }
 
 // ---- node --cpu-prof ------------------------------------------------------------------------
@@ -2407,6 +2402,35 @@ mod tests {
             Some("/tmp/bench.ts")
         );
         assert!(in_repo("src/fuzzy.ts") && !in_repo("/tmp/bench.ts"));
+    }
+
+    #[test]
+    fn windows_file_urls_resolve_against_the_project_root() {
+        // Node on Windows writes `file:///C:/...`; the root is `C:\...` (here `C:/...`, which
+        // splits into the same components on every platform).
+        let root = Path::new("C:/repo");
+        assert_eq!(
+            relative(root, "file:///C:/repo/src/fuzzy.ts").as_deref(),
+            Some("src/fuzzy.ts")
+        );
+        assert_eq!(
+            relative(root, "file:///C:/repo/node_modules/x/index.js"),
+            None
+        );
+        let bench = relative(root, "file:///C:/Users/me/AppData/Local/Temp/bench.mjs");
+        assert_eq!(
+            bench.as_deref(),
+            Some("C:/Users/me/AppData/Local/Temp/bench.mjs")
+        );
+        assert!(in_repo("src/fuzzy.ts") && !in_repo("C:/Users/me/AppData/Local/Temp/bench.mjs"));
+        assert_eq!(
+            crate::walk::file_url_path("file:///C:/My%20Repo/a.ts").as_deref(),
+            Some("C:/My Repo/a.ts")
+        );
+        assert_eq!(
+            crate::walk::file_url_path("file:///repo/a.ts").as_deref(),
+            Some("/repo/a.ts")
+        );
     }
 
     #[test]
